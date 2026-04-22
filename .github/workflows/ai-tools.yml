@@ -1,0 +1,138 @@
+name: AI Tools of the Week (Friday Evening)
+
+on:
+  schedule:
+    # JST 金曜 18:57 = UTC 金曜 09:57
+    - cron: '57 9 * * 5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate Tool Introduction
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
+          # 週ごとにカテゴリを変えて飽きさせない
+          WEEK_OF_YEAR=$(date -u -d '+9 hours' '+%V')
+          THEME_INDEX=$(( 10#$WEEK_OF_YEAR % 6 ))
+          case $THEME_INDEX in
+            0) THEME="AI検索・リサーチツール（Perplexity、Felo、GensparK等の系統）" ;;
+            1) THEME="AI文章作成・編集ツール（ChatGPT、Claude、NotebookLM等の系統）" ;;
+            2) THEME="AIコーディング・開発ツール（Cursor、Claude Code、Bolt、v0等の系統）" ;;
+            3) THEME="AI画像・動画・音声生成ツール（Midjourney、Kling、Suno、ElevenLabs等の系統）" ;;
+            4) THEME="AIビジネス・業務自動化ツール（Gamma、Otter、Notion AI、Make等の系統）" ;;
+            5) THEME="AIエージェント・自動実行ツール（Devin、Manus、Genspark Agent等の系統）" ;;
+          esac
+
+          PROMPT="あなたはアベリアの『今週のAIツール紹介』担当です。研修生・AI初心者・一般人に向けて、今日は『${THEME}』のカテゴリから1つのツールを選んで紹介してください。
+
+          【選ぶ基準】
+          - 2026年時点で実際に使える、話題になっているツール
+          - 無料枠があり、研修生が今週末に試せるもの
+          - コードが書けない人でも始められるもの優先
+          - WebSearchで最新の提供状況・料金・機能を確認すること
+
+          【書き方のルール】
+          - 専門用語は最小限、日常語で
+          - 『どんな場面で活躍するか』『研修生が週末に試すなら何をするか』を具体的に
+          - 料金・無料枠は正確に。不確かなら『要確認』と明記
+
+          【出力フォーマット】厳守
+
+          🧰 **今週のAIツール - ${TODAY}**
+
+          ## [ツール名]
+
+          **カテゴリ**: [種類を一言で]
+          **料金**: [無料枠の範囲 / 有料プラン金額]
+          **公式**: [公式サイトURL]
+
+          **🌟 どんなツール？**
+          [2-3行で核を説明、比喩使って]
+
+          **💡 何ができる？**
+          ・[具体例1：誰がどういう時に使うか]
+          ・[具体例2]
+          ・[具体例3]
+
+          **🚀 始め方（3ステップ）**
+          1. [手順1]
+          2. [手順2]
+          3. [手順3]
+
+          **🎯 研修生へのオススメ理由**
+          [60-100字、アベリア研修生にとって何が有益か]
+
+          ---
+          💬 **今週末のチャレンジ**: [30-50字、試してみる具体的な小さなアクション]
+
+          【絶対条件】
+          - 全体1500文字以内
+          - ツールは1つだけ（複数紹介禁止）
+          - 参考URL・ソース一覧は上記フォーマット内の公式URLのみ
+          - 『Sources:』『参考:』等の見出し禁止
+          - 不確かな情報（料金変更など）は『要確認』を添える
+          - 過去数週間で既に紹介されがちな定番ツールよりも、今月話題の新しいものや隠れた実力派を優先"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > tool.txt
+          echo "Raw length: $(wc -c < tool.txt)"
+
+      - name: Trim and Sanitize (char-safe)
+        run: |
+          python3 << 'PYEOF' > tool-clean.txt
+          with open('tool.txt', 'r', encoding='utf-8') as f:
+              text = f.read().strip()
+          for marker in ['Sources:', 'Source:', '参考:', '参考URL:', '引用:', 'References:']:
+              idx = text.find(marker)
+              if idx > 0:
+                  text = text[:idx].rstrip()
+                  break
+          if len(text) > 1900:
+              text = text[:1897] + '...'
+          import sys
+          sys.stdout.write(text)
+          PYEOF
+          mv tool-clean.txt tool.txt
+
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_TOOLS }}
+        run: |
+          CONTENT=$(jq -Rs . < tool.txt)
+          BODY="{\"content\": $CONTENT}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" "$WEBHOOK"
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
+        run: |
+          MSG="🚨 **ワークフロー失敗通知**
+
+          **ワークフロー**: ${{ github.workflow }}
+          **実行ID**: ${{ github.run_id }}
+          **詳細ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          **発生時刻**: $(date -u -d '+9 hours' '+%Y-%m-%d %H:%M JST')
+
+          ログ確認 → 必要なら手動再発火を検討してください。"
+          CONTENT=$(echo "$MSG" | jq -Rs .)
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"content\": $CONTENT}" "$WEBHOOK"

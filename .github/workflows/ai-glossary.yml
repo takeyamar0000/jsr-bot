@@ -1,0 +1,128 @@
+name: AI Glossary (Daily Term)
+
+on:
+  schedule:
+    # JST 08:27 毎日 = UTC 23:27 前日
+    - cron: '27 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate Term Explanation
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
+          # 日付から決定的にカテゴリを選んで重複を減らす
+          DAY_OF_YEAR=$(date -u -d '+9 hours' '+%j')
+          THEME_INDEX=$(( DAY_OF_YEAR % 5 ))
+          case $THEME_INDEX in
+            0) THEME="AI基礎用語（LLM、トークン、パラメータなど）" ;;
+            1) THEME="AIサービス・製品に関する用語（ChatGPT、Copilot、エージェントなど）" ;;
+            2) THEME="AI開発・技術用語（ファインチューニング、RAG、プロンプトエンジニアリングなど）" ;;
+            3) THEME="AI周辺ビジネス・倫理用語（アラインメント、ハルシネーション、バイアスなど）" ;;
+            4) THEME="最新AIトレンド用語（MCP、マルチモーダル、推論モデルなど）" ;;
+          esac
+
+          PROMPT="あなたはアベリアの研修生・AI初心者・一般人向けの『AI用語辞典』担当です。今日は『${THEME}』のカテゴリから、1つの用語を選んで解説してください。
+
+          【選ぶ基準】
+          - 初心者がニュースや会話で見かけて『何これ？』と感じがちな用語
+          - その用語を知ると世界が少し広がるもの
+          - 既に基礎すぎて誰でも知っているレベルは避ける
+          - 難しすぎる学術用語も避ける
+
+          【書き方のルール】
+          - 専門用語をさらに専門用語で説明しない。必ず日常の言葉や比喩で
+          - 『例えるなら〜』『〜みたいなもの』を必ず入れる
+          - 小学校高学年が読んでもニコッとする親しみやすさ
+          - 200-400字程度にコンパクトに
+
+          【出力フォーマット】厳守
+
+          📖 **今日のAI用語 - ${TODAY}**
+
+          ## [日本語訳または読み方]（英語: [term]）
+
+          **🌱 要するに？**
+          [1-2文で核をつかむ]
+
+          **🎨 例えるなら**
+          [比喩で説明、2-3文]
+
+          **👀 こんなところで登場する**
+          ・[具体例1]
+          ・[具体例2]
+
+          **💡 ワンポイント**
+          [30-60字、覚え方のコツ or 関連用語の繋がり]
+
+          【絶対条件】
+          - 全体1500文字以内
+          - 上記フォーマット以降に何も書かない
+          - 参考URL・ソース一覧書かない
+          - 『Sources:』『参考:』等の見出し禁止
+          - 用語は1つだけ（複数禁止）
+          - 不確かな情報は書かない"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > term.txt
+          echo "Raw length: $(wc -c < term.txt)"
+
+      - name: Trim and Sanitize (char-safe)
+        run: |
+          python3 << 'PYEOF' > term-clean.txt
+          with open('term.txt', 'r', encoding='utf-8') as f:
+              text = f.read().strip()
+          for marker in ['Sources:', 'Source:', '参考:', '参考URL:', '引用:', 'References:']:
+              idx = text.find(marker)
+              if idx > 0:
+                  text = text[:idx].rstrip()
+                  break
+          if len(text) > 1900:
+              text = text[:1897] + '...'
+          import sys
+          sys.stdout.write(text)
+          PYEOF
+          mv term-clean.txt term.txt
+
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_GLOSSARY }}
+        run: |
+          CONTENT=$(jq -Rs . < term.txt)
+          BODY="{\"content\": $CONTENT}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" "$WEBHOOK"
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
+        run: |
+          MSG="🚨 **ワークフロー失敗通知**
+
+          **ワークフロー**: ${{ github.workflow }}
+          **実行ID**: ${{ github.run_id }}
+          **詳細ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          **発生時刻**: $(date -u -d '+9 hours' '+%Y-%m-%d %H:%M JST')
+
+          ログ確認 → 必要なら手動再発火を検討してください。"
+          CONTENT=$(echo "$MSG" | jq -Rs .)
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"content\": $CONTENT}" "$WEBHOOK"
