@@ -13,7 +13,7 @@ import sys
 text = sys.stdin.read().strip()
 
 # Skip preamble: cut to earliest occurrence of any known header emoji
-HEAD_MARKERS = ['📖', '🌅', '🌙', '🚀', '📄', '📅', '🧰', '🎓', '📅']
+HEAD_MARKERS = ['📖', '🌅', '🌙', '🚀', '📄', '📅', '🧰', '🎓', '🎙️']
 earliest = -1
 for m in HEAD_MARKERS:
     idx = text.find(m)
