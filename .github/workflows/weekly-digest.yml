@@ -2,7 +2,6 @@ name: Weekly Digest (Sunday)
 
 on:
   schedule:
-    # JST 日曜20:00 = UTC 日曜11:00
     - cron: '57 10 * * 0'
   workflow_dispatch:
 
@@ -30,39 +29,66 @@ jobs:
           unset ANTHROPIC_API_KEY
           WEEK_END=$(date -u -d '+9 hours' '+%Y-%m-%d')
           WEEK_START=$(date -u -d '+9 hours -6 days' '+%Y-%m-%d')
-          PROMPT="あなたは株式会社アベリアの研修生向けAI週次まとめ担当です。WebSearchで過去7日間（${WEEK_START} 〜 ${WEEK_END}）のAI業界を振り返り、研修生向け週次ダイジェストを作成してください。
+          PROMPT="あなたはアベリアの『今週のAI総まとめ』担当です。研修生・AI初心者・一般人に向けて、過去7日間（${WEEK_START}〜${WEEK_END}）に世界で起きたAIの重要ニュースを、分かりやすくまとめてください。
 
-          【調査対象】過去7日間の主要AI企業・新モデル・論文・日本AI界隈・ツール新機能
+          【書き方のルール】
+          - 専門用語は最小限。カタカナは括弧で日本語説明を添える
+          - 『例えば〜』『要するに〜』の比喩を積極的に
+          - ニュースを並べるだけでなく『だから何がすごいのか』『私たちに何が起きるのか』を添える
+          - 初めてAIニュース読む人でも『なるほど、今AI業界はこんな感じなんだ』と分かる内容
 
-          【厳守する出力フォーマット】
+          【調査対象】過去7日間
+          - 大手AI企業（Anthropic、OpenAI、Google等）の重要発表
+          - 話題になった新しいAI機能やサービス
+          - 日本のAI界隈の動き
+          - AI研究の注目発見
 
-          📅 **Weekly AI Digest** | ${WEEK_START} 〜 ${WEEK_END}
+          【出力フォーマット】
 
-          **🏆 今週のビッグニュース Top 3**
-          1. [ニュース]: [1-2行]
-          2. [ニュース]: [1-2行]
-          3. [ニュース]: [1-2行]
+          📅 **今週のAI総まとめ** | ${WEEK_START}〜${WEEK_END}
 
-          **🔑 研修生が押さえるべき3つのポイント**
-          ・[ポイント]: [1行]
+          **🏆 今週、特に驚いた3大ニュース**
+          1. **[見出し]**
+             [何が起きたか + つまり何がすごいのかを2行で]
+          2. **[見出し]**
+             [同様に]
+          3. **[見出し]**
+             [同様に]
 
-          **🎯 来週の学習フォーカス**
-          [Claude Code等の実践スキル提案、60-100文字]
+          **🔑 初心者が押さえておくと良い3つのポイント**
+          ・[ポイント1]: [1行で、分かりやすく]
+          ・[ポイント2]: [1行]
+          ・[ポイント3]: [1行]
+
+          **🎯 来週、ちょっと試してほしいこと**
+          [60-100文字、Claude Codeやその他AIツールで実践できる小さなチャレンジを提案。『例えば〇〇してみる』のような具体的な話]
 
           ---
-          💡 **オーナーから一言**: [30-50文字]
+          💡 **オーナーからひとこと**: [30-50文字、研修生・読み手を鼓舞するメッセージ]
 
           【絶対条件】
-          - 全体1700文字以内
-          - Sources / 参考 書かない
-          - 不確かな情報禁止"
+          - 全体1500文字以内
+          - 参考URL・ソース一覧書かない
+          - 不確かな情報は書かない
+          - 『今週のビッグニュース』は本当に重要だったもの3件に厳選"
 
           claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > digest.txt
 
-      - name: Trim and Sanitize
+      - name: Trim and Sanitize (char-safe)
         run: |
-          sed -i '/^Sources:/,$d; /^参考:/,$d; /^引用:/,$d; /^References:/,$d' digest.txt
-          head -c 1950 digest.txt > digest-clean.txt
+          python3 << 'PYEOF' > digest-clean.txt
+          with open('digest.txt', 'r', encoding='utf-8') as f:
+              text = f.read().strip()
+          for marker in ['Sources:', 'Source:', '参考:', '参考URL:', '引用:', 'References:']:
+              idx = text.find(marker)
+              if idx > 0:
+                  text = text[:idx].rstrip()
+                  break
+          if len(text) > 1900:
+              text = text[:1897] + '...'
+          import sys
+          sys.stdout.write(text)
+          PYEOF
           mv digest-clean.txt digest.txt
 
       - name: Post to Discord

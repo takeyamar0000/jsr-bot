@@ -2,7 +2,6 @@ name: Model Releases Watcher
 
 on:
   schedule:
-    # JST 12:00 = UTC 03:00
     - cron: '57 2 * * *'
   workflow_dispatch:
 
@@ -29,36 +28,53 @@ jobs:
         run: |
           unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
-          PROMPT="あなたは株式会社アベリアの研修生向けAIモデル速報担当です。WebSearchで過去24時間のAIモデル・API・機能リリース情報を調査してください。
+          PROMPT="あなたはアベリアのAI新製品担当です。過去24時間のAI企業の『新しいもの』発表を、研修生・AI初心者・一般人に向けて分かりやすく紹介してください。
 
-          【調査対象】Anthropic / OpenAI / Google DeepMind / Meta / xAI / Mistral / Cohere 等
+          【書き方のルール】
+          - 『新モデルがリリース』ではなく『新しいAIが登場した、これで〇〇ができる』と書く
+          - カタカナ専門用語は必ず日本語でかみ砕く
+          - 『何がすごいのか』『自分の仕事や生活にどう活かせるか』を必ず添える
+          - 具体例を入れる（例：『旅行の計画を任せられる』『長い文章を要約できる』）
 
-          【判定】過去24時間以内に特筆すべきリリースがあった場合のみ投稿。
+          【調査対象】過去24時間
+          - Anthropic（Claude）、OpenAI（ChatGPT）、Google（Gemini）、Meta、xAI 等の発表
+          - 新しいAIの機能、サービス、ツール
+
+          【判定】
+          特筆すべき新発表があった場合のみ投稿。マイナーアップデートや既報の情報はスルー。
 
           【リリースが無い場合】
-          出力の最初の行に必ず 'NO_RELEASES' とだけ書いてください。それ以外何も書かない。
+          出力の最初の行に必ず 'NO_RELEASES' とだけ書く。それ以外書かない。
 
-          【リリースがある場合】以下のフォーマット。
+          【リリースがある場合のフォーマット】
 
-          🚀 **Model Releases - ${TODAY}**
+          🚀 **新しいAIが登場しました - ${TODAY}**
 
-          **[企業名] [モデル名/機能名]**
-          ・リリース日: [日付]
-          ・何が変わったか: [1-2行]
-          ・主な特徴: [箇条書き2-3点]
-          ・使い方: [1行]
-          ・研修生視点: [30-50文字]
+          **[企業名] の [新機能の愛称]**
 
-          ---（次のリリースあれば繰り返し、最大3件）
+          **どんなもの？**
+          [2-3行で『例えば〜』『つまり〜』を使いながら説明]
+
+          **何がすごい？**
+          ・[ポイント1を分かりやすく]
+          ・[ポイント2]
+
+          **どう使える？**
+          [実際の使い方を具体的な場面で1-2行]
+
+          **試してみたい人は**
+          [公式サイトや使い始めの案内を1行]
+
+          ---（新発表が複数あれば繰り返し、最大3件）
 
           【絶対条件】
-          - 全体1700文字以内
-          - Sources / 参考 / 引用 書かない
-          - 不確かな情報禁止
-          - リリース無ければ NO_RELEASES のみ出力"
+          - 全体1500文字以内
+          - 参考URL・ソース一覧書かない
+          - 不確かな情報は書かない
+          - 新発表が無ければ NO_RELEASES のみ出力"
 
           claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > release.txt
-          echo "Response length: $(wc -c < release.txt)"
+          echo "Raw length: $(wc -c < release.txt)"
 
       - name: Check for NO_RELEASES
         id: check
@@ -66,16 +82,27 @@ jobs:
           FIRST_LINE=$(head -1 release.txt | tr -d '\r\n ')
           if [ "$FIRST_LINE" = "NO_RELEASES" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "No releases today, skipping Discord post"
+            echo "No releases today, skipping"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Trim and Sanitize
+      - name: Trim and Sanitize (char-safe)
         if: steps.check.outputs.skip != 'true'
         run: |
-          sed -i '/^Sources:/,$d; /^参考:/,$d; /^引用:/,$d; /^References:/,$d' release.txt
-          head -c 1950 release.txt > release-clean.txt
+          python3 << 'PYEOF' > release-clean.txt
+          with open('release.txt', 'r', encoding='utf-8') as f:
+              text = f.read().strip()
+          for marker in ['Sources:', 'Source:', '参考:', '参考URL:', '引用:', 'References:']:
+              idx = text.find(marker)
+              if idx > 0:
+                  text = text[:idx].rstrip()
+                  break
+          if len(text) > 1900:
+              text = text[:1897] + '...'
+          import sys
+          sys.stdout.write(text)
+          PYEOF
           mv release-clean.txt release.txt
 
       - name: Post to Discord

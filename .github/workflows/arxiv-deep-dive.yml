@@ -2,7 +2,6 @@ name: ArXiv Deep Dive (Sunday Morning)
 
 on:
   schedule:
-    # JST 日曜10:00 = UTC 日曜01:00
     - cron: '57 0 * * 0'
   workflow_dispatch:
 
@@ -23,56 +22,75 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
-      - name: Generate ArXiv Deep Dive
+      - name: Generate Paper Deep Dive
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
-          PROMPT="あなたは株式会社アベリアの研修生向けAI論文解説担当です。WebSearchでArXiv（cs.AI / cs.CL / cs.LG）の過去7日間の新着論文から研修生が読む価値が高いものを1本だけ選び深掘り解説してください。
+          PROMPT="あなたはアベリアの『今週の注目AI研究』担当です。過去7日間に世界で発表されたAI研究（ArXiv等）から、研修生・AI初心者・一般人に『わあ、そんなことできるんだ！』と思わせる1本を選び、分かりやすく解説してください。
 
-          【選定基準】実用寄り / 理解しやすい / インパクトあり
+          【書き方のルール】
+          - 論文紹介ではなく『面白い発見の紹介』として書く
+          - 専門用語・カタカナは最小限。使うときは必ず日本語でかみ砕く
+          - 『例えば〜』『要するに〜』『〜みたいなもの』の比喩を多用
+          - 小学校高学年が聞いても面白がる内容に
+          - 数式・難しい概念には踏み込まない。『だから何ができるか』が中心
 
-          【厳守する出力フォーマット】
+          【選ぶ基準】
+          - 『すごい』『面白い』『役立ちそう』が伝わりやすい研究
+          - 実用的・応用しやすい内容
+          - 発表元の信頼性（大学・有名研究機関・大手AI企業）
+          - 極端に数学的な純理論系は避ける
 
-          📄 **今週のArXiv Deep Dive** | ${TODAY}
+          【出力フォーマット】
 
-          **論文タイトル**: [英語原題]
-          **和訳**: [日本語タイトル]
-          **著者・機関**: [主著者・所属]
-          **発表日**: [ArXiv公開日]
+          📄 **今週の注目AI研究 - ${TODAY}**
 
-          **📌 一言まとめ**
-          [30-80文字]
+          **[研究の内容を一言で表すキャッチコピー（30-40文字）]**
 
-          **🎯 何を解決した？**
-          [80-150文字]
+          **📌 要するに何の研究？**
+          [2-3行で、専門知識なしの人にも核を伝える]
 
-          **💡 貢献の中身**
-          ・[貢献1]: [1-2行]
-          ・[貢献2]: [1-2行]
-          ・[貢献3]: [1-2行]
+          **🎯 何がすごい？（例え話で）**
+          [3-4行、『例えば〜』『〜みたいなもの』を使って、すごさを具体的に]
 
-          **🔧 研修生が活かすヒント**
-          [100-150文字]
+          **💡 どう役に立つ？**
+          [2-3行、実際の生活や仕事でこう使えるかも、という話]
 
-          **📎 ArXiv URL**: [URL]
+          **📎 研究情報**
+          ・研究チーム: [研究者名 / 所属大学・機関]
+          ・発表日: [日付]
+          ・原題（英語）: [論文タイトル]
 
           ---
-          💬 **今週の一言**: [30-50文字]
+          💬 **今週のひとこと**: [30-50文字、ワクワクが残る締めの言葉]
 
           【絶対条件】
-          - 全体1700文字以内
-          - 論文1本だけ
-          - Sources / 参考 書かない（ArXiv URLは上記内のみ）
-          - 不確かな情報禁止"
+          - 全体1500文字以内
+          - 論文は1本だけ
+          - 参考URL・ソース一覧書かない（研究情報は上記フォーマット内のみ）
+          - 不確かな情報は書かない
+          - 『貢献』『手法』『ベンチマーク』などの学術用語は避ける"
 
           claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > paper.txt
+          echo "Raw length: $(wc -c < paper.txt)"
 
-      - name: Trim and Sanitize
+      - name: Trim and Sanitize (char-safe)
         run: |
-          sed -i '/^Sources:/,$d; /^References:/,$d' paper.txt
-          head -c 1950 paper.txt > paper-clean.txt
+          python3 << 'PYEOF' > paper-clean.txt
+          with open('paper.txt', 'r', encoding='utf-8') as f:
+              text = f.read().strip()
+          for marker in ['Sources:', 'Source:', '参考:', '参考URL:', '引用:', 'References:']:
+              idx = text.find(marker)
+              if idx > 0:
+                  text = text[:idx].rstrip()
+                  break
+          if len(text) > 1900:
+              text = text[:1897] + '...'
+          import sys
+          sys.stdout.write(text)
+          PYEOF
           mv paper-clean.txt paper.txt
 
       - name: Post to Discord

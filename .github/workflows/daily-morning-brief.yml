@@ -2,8 +2,6 @@ name: Daily AI Morning Brief
 
 on:
   schedule:
-    # JST 07:00 = UTC 22:00 前日
-    # 「毎時00分」を避けて57分で安定運用（GitHub Actions 高負荷時間帯対策）
     - cron: '57 21 * * *'
   workflow_dispatch:
 
@@ -17,71 +15,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Install Claude Code CLI
-        run: |
-          npm install -g @anthropic-ai/claude-code
-          claude --version
-
-      - name: Ensure ANTHROPIC_API_KEY not set
-        run: |
-          unset ANTHROPIC_API_KEY
-          echo "API key cleared"
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: Generate AI Morning Brief
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
+          unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
-          PROMPT="あなたは株式会社アベリアの研修生向けAIニュース担当です。WebSearchで過去24〜48時間のAI業界動向を調査し、日本語で今日の朝ブリーフを作成してください。
+          PROMPT="あなたはアベリアの朝のAIニュース担当です。研修生、AIを学び始めた人、AIに興味のある一般の方に向けて、過去24〜48時間のAIニュースを**専門用語なし**で分かりやすく紹介してください。
 
-          【調査対象】
-          - Anthropic / OpenAI / Google DeepMind / Meta / xAI の公式リリース
-          - 新AIモデル・機能・ツール発表
-          - ArXiv の実用寄り注目論文
-          - 日本のAI界隈で話題の動き
+          【書き方のルール】
+          - 横文字・専門用語は最小限。使うときは必ず日本語でかみ砕く（例：『LLM（文章を生成するAI）』）
+          - 『例えば〜』『〜みたいなもの』の比喩を積極的に
+          - 事実の羅列ではなく『だから何がすごいのか』『私たちの暮らしにどう関わるのか』を一言添える
+          - 小学校高学年にも伝わるトーン。でも幼稚にはしない
+          - 読んだ人が『へえ！』『面白そう』と思える言い回し
 
-          【厳守する出力フォーマット】
+          【調査対象】過去24〜48時間
+          - Anthropic（Claude）/ OpenAI（ChatGPT）/ Google（Gemini）等の大手AI企業の発表
+          - 新しいAIの機能やサービス
+          - AI研究の注目発見
+          - 日本のAI界隈の話題
 
-          🌅 **AI Morning Brief - ${TODAY}**
+          【出力フォーマット】厳守
 
-          **🔥 今日の注目**
-          ・[見出し]: [1-2行の要約]
+          🌅 **AI朝刊 - ${TODAY}**
 
-          **📰 公式発表・新機能**
-          ・[企業名]: [1行要約]
+          **🔥 今日の注目トピック**
+          ・[短い見出し]: [何が起きたか＋『つまり私たちにこう効く』を1-2行]
+          ・[短い見出し]: [同様に]
 
-          **📄 注目論文・研究**
-          ・[タイトル]: [なぜ重要か1行]
+          **📰 AI企業の新しい発表**
+          ・[企業名]: [新機能や発表を一般人向けに噛み砕いて1行]
 
-          **🇯🇵 日本AI界隈**
-          ・[話題]: [1行要約]
+          **🔬 研究の世界から**
+          ・[何が面白いか]: [研究の話を『例えば〜』の比喩付きで1-2行]
+
+          **🇯🇵 日本のAI話題**
+          ・[話題]: [分かりやすく1行]
 
           ---
-          💡 **今日の研修生へ**: [30-50文字のメッセージ]
+          💡 **今日のひとこと**: [30-50文字、読んだ人を勇気づける or 今日試したくなる一言]
 
           【絶対条件】
-          - 上記フォーマットで閉じる。以降に何も書かない。
-          - 参考URL、ソース一覧、英語メタデータ一切含めない。
-          - 全体1700文字以内。
-          - 不確かな情報は書かない。
-          - 「Sources:」「参考:」等の見出しは使用禁止。"
+          - 全体1500文字以内
+          - 上記フォーマット以降に何も書かない
+          - 参考URL・ソース一覧・英語メタデータ一切書かない
+          - 『Sources:』『参考:』等の見出し禁止
+          - ネタが少ない領域はその項目ごと省略可
+          - 不確かな情報は書かない"
 
           claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > brief.txt
-          echo "Brief length: $(wc -c < brief.txt)"
+          echo "Raw length: $(wc -c < brief.txt)"
 
-      - name: Trim and Sanitize
+      - name: Trim and Sanitize (char-safe)
         run: |
-          # "Sources:" 以降を切り落とし
-          sed -i '/^Sources:/,$d; /^参考:/,$d; /^引用:/,$d; /^References:/,$d' brief.txt
-          # 1950文字制限
-          head -c 1950 brief.txt > brief-clean.txt
+          python3 << 'PYEOF' > brief-clean.txt
+          with open('brief.txt', 'r', encoding='utf-8') as f:
+              text = f.read().strip()
+          for marker in ['Sources:', 'Source:', '参考:', '参考URL:', '引用:', 'References:']:
+              idx = text.find(marker)
+              if idx > 0:
+                  text = text[:idx].rstrip()
+                  break
+          if len(text) > 1900:
+              text = text[:1897] + '...'
+          import sys
+          sys.stdout.write(text)
+          PYEOF
           mv brief-clean.txt brief.txt
-          echo "Final length: $(wc -c < brief.txt)"
+          echo "Final char count: $(python3 -c "print(len(open('brief.txt',encoding='utf-8').read()))")"
 
       - name: Post to Discord
         env:
@@ -91,4 +100,3 @@ jobs:
           BODY="{\"content\": $CONTENT}"
           curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
             -d "$BODY" "$WEBHOOK"
-          echo "Posted"
