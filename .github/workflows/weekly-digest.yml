@@ -93,7 +93,7 @@ jobs:
 
       - name: Post to Discord
         env:
-          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_BRIEF }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_WEEKLY }}
         run: |
           CONTENT=$(jq -Rs . < digest.txt)
           BODY="{\"content\": $CONTENT}"

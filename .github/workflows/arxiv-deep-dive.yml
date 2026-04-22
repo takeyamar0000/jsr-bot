@@ -95,7 +95,7 @@ jobs:
 
       - name: Post to Discord
         env:
-          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_BRIEF }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PAPER }}
         run: |
           CONTENT=$(jq -Rs . < paper.txt)
           BODY="{\"content\": $CONTENT}"
