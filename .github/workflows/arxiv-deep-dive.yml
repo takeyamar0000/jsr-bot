@@ -101,3 +101,20 @@ jobs:
           BODY="{\"content\": $CONTENT}"
           curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
             -d "$BODY" "$WEBHOOK"
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
+        run: |
+          MSG="🚨 **ワークフロー失敗通知**
+
+          **ワークフロー**: ${{ github.workflow }}
+          **実行ID**: ${{ github.run_id }}
+          **詳細ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          **発生時刻**: $(date -u -d '+9 hours' '+%Y-%m-%d %H:%M JST')
+
+          ログ確認 → 必要なら手動再発火を検討してください。"
+          CONTENT=$(echo "$MSG" | jq -Rs .)
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"content\": $CONTENT}" "$WEBHOOK"
