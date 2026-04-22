@@ -96,19 +96,7 @@ jobs:
 
       - name: Trim and Sanitize (char-safe)
         run: |
-          python3 << 'PYEOF' > tool-clean.txt
-          with open('tool.txt', 'r', encoding='utf-8') as f:
-              text = f.read().strip()
-          for marker in ['Sources:', 'Source:', '参考:', '参考URL:', '引用:', 'References:']:
-              idx = text.find(marker)
-              if idx > 0:
-                  text = text[:idx].rstrip()
-                  break
-          if len(text) > 1900:
-              text = text[:1897] + '...'
-          import sys
-          sys.stdout.write(text)
-          PYEOF
+          python3 .github/scripts/sanitize.py < tool.txt > tool-clean.txt
           mv tool-clean.txt tool.txt
 
       - name: Post to Discord
