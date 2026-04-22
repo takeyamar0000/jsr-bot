@@ -1,0 +1,76 @@
+name: Evening Brief (Weekday JP AI + Claude Code Tips)
+
+on:
+  schedule:
+    # JST 18:00 平日 = UTC 09:00 Mon-Fri
+    - cron: '57 8 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate Evening Brief
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
+          PROMPT="あなたは株式会社アベリアの研修生向けAI担当です。WebSearchで以下を調査し、日本語で夕方ブリーフを作成してください。
+
+          【調査対象】過去24時間
+          1. 日本のAI界隈（深津貴之/安野貴博/shi3z 等のX投稿、Zenn・Qiita トレンド）
+          2. Claude Code の使いこなしTips を1つ
+
+          【厳守する出力フォーマット】
+
+          🌙 **Evening Brief - ${TODAY}**
+
+          **🇯🇵 日本AI界隈まとめ**
+          ・[話題]: [1-2行要約]
+
+          **💎 今日のClaude Code Tips**
+
+          **[Tips見出し]**
+          [2-4行の説明]
+
+          [コマンド例があればコードブロックで]
+
+          ---
+          💡 **研修生へ**: [30-50文字]
+
+          【絶対条件】
+          - 全体1700文字以内
+          - Sources / 参考 書かない
+          - 不確かな情報禁止
+          - Tips は1つに絞る"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > brief.txt
+
+      - name: Trim and Sanitize
+        run: |
+          sed -i '/^Sources:/,$d; /^参考:/,$d; /^引用:/,$d; /^References:/,$d' brief.txt
+          head -c 1950 brief.txt > brief-clean.txt
+          mv brief-clean.txt brief.txt
+
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_BRIEF }}
+        run: |
+          CONTENT=$(jq -Rs . < brief.txt)
+          BODY="{\"content\": $CONTENT}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" "$WEBHOOK"

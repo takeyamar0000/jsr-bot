@@ -1,0 +1,75 @@
+name: Weekly Digest (Sunday)
+
+on:
+  schedule:
+    # JST 日曜20:00 = UTC 日曜11:00
+    - cron: '57 10 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate Weekly Digest
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          WEEK_END=$(date -u -d '+9 hours' '+%Y-%m-%d')
+          WEEK_START=$(date -u -d '+9 hours -6 days' '+%Y-%m-%d')
+          PROMPT="あなたは株式会社アベリアの研修生向けAI週次まとめ担当です。WebSearchで過去7日間（${WEEK_START} 〜 ${WEEK_END}）のAI業界を振り返り、研修生向け週次ダイジェストを作成してください。
+
+          【調査対象】過去7日間の主要AI企業・新モデル・論文・日本AI界隈・ツール新機能
+
+          【厳守する出力フォーマット】
+
+          📅 **Weekly AI Digest** | ${WEEK_START} 〜 ${WEEK_END}
+
+          **🏆 今週のビッグニュース Top 3**
+          1. [ニュース]: [1-2行]
+          2. [ニュース]: [1-2行]
+          3. [ニュース]: [1-2行]
+
+          **🔑 研修生が押さえるべき3つのポイント**
+          ・[ポイント]: [1行]
+
+          **🎯 来週の学習フォーカス**
+          [Claude Code等の実践スキル提案、60-100文字]
+
+          ---
+          💡 **オーナーから一言**: [30-50文字]
+
+          【絶対条件】
+          - 全体1700文字以内
+          - Sources / 参考 書かない
+          - 不確かな情報禁止"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > digest.txt
+
+      - name: Trim and Sanitize
+        run: |
+          sed -i '/^Sources:/,$d; /^参考:/,$d; /^引用:/,$d; /^References:/,$d' digest.txt
+          head -c 1950 digest.txt > digest-clean.txt
+          mv digest-clean.txt digest.txt
+
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_BRIEF }}
+        run: |
+          CONTENT=$(jq -Rs . < digest.txt)
+          BODY="{\"content\": $CONTENT}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" "$WEBHOOK"

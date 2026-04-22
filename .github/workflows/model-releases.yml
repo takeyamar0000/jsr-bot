@@ -1,0 +1,89 @@
+name: Model Releases Watcher
+
+on:
+  schedule:
+    # JST 12:00 = UTC 03:00
+    - cron: '57 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate Model Releases Brief
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
+          PROMPT="あなたは株式会社アベリアの研修生向けAIモデル速報担当です。WebSearchで過去24時間のAIモデル・API・機能リリース情報を調査してください。
+
+          【調査対象】Anthropic / OpenAI / Google DeepMind / Meta / xAI / Mistral / Cohere 等
+
+          【判定】過去24時間以内に特筆すべきリリースがあった場合のみ投稿。
+
+          【リリースが無い場合】
+          出力の最初の行に必ず 'NO_RELEASES' とだけ書いてください。それ以外何も書かない。
+
+          【リリースがある場合】以下のフォーマット。
+
+          🚀 **Model Releases - ${TODAY}**
+
+          **[企業名] [モデル名/機能名]**
+          ・リリース日: [日付]
+          ・何が変わったか: [1-2行]
+          ・主な特徴: [箇条書き2-3点]
+          ・使い方: [1行]
+          ・研修生視点: [30-50文字]
+
+          ---（次のリリースあれば繰り返し、最大3件）
+
+          【絶対条件】
+          - 全体1700文字以内
+          - Sources / 参考 / 引用 書かない
+          - 不確かな情報禁止
+          - リリース無ければ NO_RELEASES のみ出力"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > release.txt
+          echo "Response length: $(wc -c < release.txt)"
+
+      - name: Check for NO_RELEASES
+        id: check
+        run: |
+          FIRST_LINE=$(head -1 release.txt | tr -d '\r\n ')
+          if [ "$FIRST_LINE" = "NO_RELEASES" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No releases today, skipping Discord post"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trim and Sanitize
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          sed -i '/^Sources:/,$d; /^参考:/,$d; /^引用:/,$d; /^References:/,$d' release.txt
+          head -c 1950 release.txt > release-clean.txt
+          mv release-clean.txt release.txt
+
+      - name: Post to Discord
+        if: steps.check.outputs.skip != 'true'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_MODEL }}
+        run: |
+          CONTENT=$(jq -Rs . < release.txt)
+          BODY="{\"content\": $CONTENT}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" "$WEBHOOK"

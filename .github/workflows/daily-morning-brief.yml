@@ -1,0 +1,94 @@
+name: Daily AI Morning Brief
+
+on:
+  schedule:
+    # JST 07:00 = UTC 22:00 前日
+    # 「毎時00分」を避けて57分で安定運用（GitHub Actions 高負荷時間帯対策）
+    - cron: '57 21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      - name: Ensure ANTHROPIC_API_KEY not set
+        run: |
+          unset ANTHROPIC_API_KEY
+          echo "API key cleared"
+
+      - name: Generate AI Morning Brief
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
+          PROMPT="あなたは株式会社アベリアの研修生向けAIニュース担当です。WebSearchで過去24〜48時間のAI業界動向を調査し、日本語で今日の朝ブリーフを作成してください。
+
+          【調査対象】
+          - Anthropic / OpenAI / Google DeepMind / Meta / xAI の公式リリース
+          - 新AIモデル・機能・ツール発表
+          - ArXiv の実用寄り注目論文
+          - 日本のAI界隈で話題の動き
+
+          【厳守する出力フォーマット】
+
+          🌅 **AI Morning Brief - ${TODAY}**
+
+          **🔥 今日の注目**
+          ・[見出し]: [1-2行の要約]
+
+          **📰 公式発表・新機能**
+          ・[企業名]: [1行要約]
+
+          **📄 注目論文・研究**
+          ・[タイトル]: [なぜ重要か1行]
+
+          **🇯🇵 日本AI界隈**
+          ・[話題]: [1行要約]
+
+          ---
+          💡 **今日の研修生へ**: [30-50文字のメッセージ]
+
+          【絶対条件】
+          - 上記フォーマットで閉じる。以降に何も書かない。
+          - 参考URL、ソース一覧、英語メタデータ一切含めない。
+          - 全体1700文字以内。
+          - 不確かな情報は書かない。
+          - 「Sources:」「参考:」等の見出しは使用禁止。"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > brief.txt
+          echo "Brief length: $(wc -c < brief.txt)"
+
+      - name: Trim and Sanitize
+        run: |
+          # "Sources:" 以降を切り落とし
+          sed -i '/^Sources:/,$d; /^参考:/,$d; /^引用:/,$d; /^References:/,$d' brief.txt
+          # 1950文字制限
+          head -c 1950 brief.txt > brief-clean.txt
+          mv brief-clean.txt brief.txt
+          echo "Final length: $(wc -c < brief.txt)"
+
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_BRIEF }}
+        run: |
+          CONTENT=$(jq -Rs . < brief.txt)
+          BODY="{\"content\": $CONTENT}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" "$WEBHOOK"
+          echo "Posted"

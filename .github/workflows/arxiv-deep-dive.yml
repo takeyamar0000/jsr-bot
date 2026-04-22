@@ -1,0 +1,85 @@
+name: ArXiv Deep Dive (Sunday Morning)
+
+on:
+  schedule:
+    # JST 日曜10:00 = UTC 日曜01:00
+    - cron: '57 0 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate ArXiv Deep Dive
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
+          PROMPT="あなたは株式会社アベリアの研修生向けAI論文解説担当です。WebSearchでArXiv（cs.AI / cs.CL / cs.LG）の過去7日間の新着論文から研修生が読む価値が高いものを1本だけ選び深掘り解説してください。
+
+          【選定基準】実用寄り / 理解しやすい / インパクトあり
+
+          【厳守する出力フォーマット】
+
+          📄 **今週のArXiv Deep Dive** | ${TODAY}
+
+          **論文タイトル**: [英語原題]
+          **和訳**: [日本語タイトル]
+          **著者・機関**: [主著者・所属]
+          **発表日**: [ArXiv公開日]
+
+          **📌 一言まとめ**
+          [30-80文字]
+
+          **🎯 何を解決した？**
+          [80-150文字]
+
+          **💡 貢献の中身**
+          ・[貢献1]: [1-2行]
+          ・[貢献2]: [1-2行]
+          ・[貢献3]: [1-2行]
+
+          **🔧 研修生が活かすヒント**
+          [100-150文字]
+
+          **📎 ArXiv URL**: [URL]
+
+          ---
+          💬 **今週の一言**: [30-50文字]
+
+          【絶対条件】
+          - 全体1700文字以内
+          - 論文1本だけ
+          - Sources / 参考 書かない（ArXiv URLは上記内のみ）
+          - 不確かな情報禁止"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > paper.txt
+
+      - name: Trim and Sanitize
+        run: |
+          sed -i '/^Sources:/,$d; /^References:/,$d' paper.txt
+          head -c 1950 paper.txt > paper-clean.txt
+          mv paper-clean.txt paper.txt
+
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_BRIEF }}
+        run: |
+          CONTENT=$(jq -Rs . < paper.txt)
+          BODY="{\"content\": $CONTENT}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" "$WEBHOOK"
