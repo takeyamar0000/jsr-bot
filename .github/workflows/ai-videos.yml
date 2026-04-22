@@ -1,9 +1,9 @@
-name: AI Video & Podcast Weekly (Saturday)
+name: AI Video & Podcast Daily
 
 on:
   schedule:
-    # JST 土曜 10:27 = UTC 土曜 01:27
-    - cron: '27 1 * * 6'
+    # JST 毎日 10:27 = UTC 01:27
+    - cron: '27 1 * * *'
   workflow_dispatch:
 
 permissions:
@@ -29,70 +29,61 @@ jobs:
         run: |
           unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
-          WEEK_START=$(date -u -d '+9 hours -6 days' '+%Y-%m-%d')
 
-          PROMPT="あなたはアベリアの『今週のAI動画・Podcast』担当です。研修生・AI初心者・一般人に向けて、過去7日間（${WEEK_START}〜${TODAY}）に配信されたAI関連の動画/ポッドキャストから3-4本を選び、紹介してください。
+          PROMPT="あなたはアベリアの『今日のAI動画・Podcast』担当です。研修生・AI初心者・一般人に向けて、過去24〜48時間に配信された動画/ポッドキャストから2-3本を選んで紹介してください。
 
-          【調査対象】過去7日間
-          ## 英語系Podcast（公式サイトやApple Podcasts等で最新エピソード確認）
-          - Latent Space（swyx）
-          - No Priors（Sarah Guo & Elad Gil）
-          - Lex Fridman Podcast
-          - Practical AI
-          - Dwarkesh Podcast
-          - The AI Breakdown
-          - AI Engineering Podcast
+          【調査対象】過去24〜48時間に配信されたもの
 
-          ## 英語系YouTube
-          - Two Minute Papers
-          - AI Explained
-          - Fireship
-          - Matthew Berman
-          - Nate Gentile
-
-          ## 日本語系
-          - 落合陽一（YouTubeチャンネル）
+          ## 日本語系 優先（最低1本は日本語から）
+          - **チャエン** (@masahirochaen / AI系YouTuber、最新AIニュース解説)
+          - **みかみ** (AI系YouTube配信者)
+          - 落合陽一 公式YouTubeチャンネル
           - 松尾研究室 関連配信
-          - 安野貴博（X/Spaces等）
-          - 茶番AI、AI解説系YouTuber
-          - 日本人のAI Podcast（でみやーじ等）
+          - 安野貴博 配信（YouTube / X Spaces）
+          - 茶番AI、その他日本のAI系YouTuber/Podcaster
+
+          ## 英語系 補助（話題性が高いもののみ）
+          - Podcast: Latent Space / No Priors / Lex Fridman / The AI Breakdown / Dwarkesh Podcast / Practical AI
+          - YouTube: Two Minute Papers / AI Explained / Matthew Berman / Fireship
 
           【選ぶ基準】
-          - 過去7日以内に配信されたエピソード/動画
-          - 研修生・初心者が聞いて/見て学びになるもの
-          - バラエティを意識（英語1-2本、日本語1-2本など）
-          - 『忙しくて全部見る時間ない人に、これだけは聞いてほしい』目線
+          - 過去24〜48時間以内に公開された新規コンテンツ
+          - 研修生・初心者が見て/聴いて学びになる
+          - **日本語コンテンツ最低1本を含める**（チャエンさん・みかみさん優先）
+          - 英語は特に話題のものだけ1-2本
+          - 全体で2-3本に絞る
 
           【書き方のルール】
           - 専門用語は最小限。カタカナは日本語で補足
-          - 『何が話題か』『なぜ研修生に聴く価値があるか』を添える
-          - 時間がない人でも要点が分かるよう要約
+          - 『何が話題か』『なぜ研修生に価値があるか』を添える
+          - 忙しい人でも要点が分かるよう簡潔に
 
           【出力フォーマット】厳守
 
-          🎙️ **今週のAI動画・Podcast** | ${WEEK_START}〜${TODAY}
+          🎙️ **今日のAI動画・配信 - ${TODAY}**
 
-          ## 【1】[配信名] - [エピソード/動画タイトル]
-          **形式**: Podcast / YouTube / ライブ配信
+          ## 【1】[配信者名/チャンネル名] - [タイトル]
+          **形式**: YouTube / Podcast / ライブ配信
           **配信日**: YYYY-MM-DD
-          **尺**: 約X分 or X時間（わかれば）
-          **聴きどころ** 🎯
-          [100-150字で要点をわかりやすく]
+          **尺**: 約X分（わかれば）
+          **見どころ** 🎯
+          [80-120字で要点]
           **研修生へのひとこと** 💡
-          [50-80字で『ここが参考になる』]
+          [30-50字で参考になるポイント]
           **🔗** [URL]
 
           ## 【2】...
-          同じフォーマットで繰り返し（最大4本、3本でもOK）
+          同じフォーマットで繰り返し（全2-3本）
 
           ---
-          💬 **今週末のおすすめ1本**: [30-50字、複数の中から特に推す1本]
+          💬 **今日の推し1本**: [30-50字、複数の中から特に推す1本]
 
           【絶対条件】
           - 全体1800文字以内
-          - 3〜4本に絞る（5本以上禁止）
+          - 2-3本に絞る（4本以上禁止）
           - URLは必ず実在の正確なもの。記憶で書かずWebSearchで確認したURL
-          - 参考URLリストは上記フォーマット内の🔗のみ
+          - 見つからなければ直近1週間まで範囲拡大、それでも無ければ本数を減らしてOK
+          - 参考URLは上記フォーマット内の🔗のみ
           - 『Sources:』『参考:』等の見出し禁止
           - 不確かな情報は書かない（配信日・尺は分からなければ省略OK）
           - 出力の1文字目から🎙️で始める。前置き・メタコメント一切書かない"
