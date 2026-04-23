@@ -28,28 +28,28 @@ jobs:
         run: |
           unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y年%-m月%-d日')
-
-          PROMPT="あなたは3人のAIキャラクターによるディベートの脚本家です。
+          PROMPT=$(cat <<ENDPROMPT
+          あなたは3人のAIキャラクターによるディベートの脚本家です。
 
           キャラクター設定:
-          - Nova（ノバ）: 公平な司会者。「次はどうでしょう？」「まとめると？」「面白い視点ですね」口調。
-          - Sage（セージ）: 肯定・賛成派。「〜という点で素晴らしいです」「データを見ると〜」口調。論理的。
-          - Ren（レン）: 懐疑・批判派。「本当にそう？」「でも〜ではないですか？」口調。鋭い質問で議論を深める。
+          - Nova（ノバ）: 公平な司会者。口調は「次はどうでしょう？」「まとめると？」。
+          - Sage（セージ）: 肯定・賛成派。口調は「〜という点で素晴らしいです」「データを見ると〜」。論理的。
+          - Ren（レン）: 懐疑・批判派。口調は「本当にそう？」「でも〜ではないですか？」。鋭い質問が特徴。
 
           ${TODAY} 時点でのAI界隈の最もホットな論争テーマを1つ選び、3人のディベートを生成してください。
-          テーマ例：「AIは仕事を奪うか否か」「AGIは10年以内に来るか」「AIの著作権問題」等
-          ただし最新の話題や今週のニュースに関連するものを優先してください。
+          テーマ例: AIは仕事を奪うか、AGIは10年以内に来るか、AIの著作権問題 等
+          ただし今週のニュースに関連するテーマを優先してください。
 
-          【絶対ルール】
-          - 純粋なJSONのみ出力。説明文・コードブロック記号・前置き一切不要
-          - 形式: [{\"speaker\": \"Nova\", \"message\": \"...\"}, ...]
-          - 必ず最初に Nova がテーマ紹介する1メッセージを入れる
+          ルール:
+          - 純粋なJSONのみ出力。説明文・前置きは一切不要
+          - 形式: [{"speaker": "Nova", "message": "..."}, ...]
+          - 最初にNovaがテーマを紹介する1メッセージを入れる
           - 10〜14メッセージ（Nova→Sage→Ren→Nova→... の流れ）
           - 各メッセージ200字以内
-          - 専門用語は括弧で解説
-          - 絵文字を適度に使用
-          - 最後は Nova が「みなさんはどう思いますか？ 💬-雑談 で教えてください！」で締める"
-
+          - 専門用語は括弧で解説、絵文字を適度に使用
+          - 最後はNovaが「みなさんはどう思いますか？ 雑談チャンネルで教えてください！」で締める
+          ENDPROMPT
+          )
           claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > raw_debate.txt
           echo "Raw output length: $(wc -c < raw_debate.txt)"
 
@@ -68,12 +68,9 @@ jobs:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_DEBATE }}
         run: |
           TODAY=$(date -u -d '+9 hours' '+%Y/%m/%d')
-          MSG="🔔 **今週のAIディベート始まります！**（${TODAY}）
-
-          Nova・Sage・Ren の3人が今週のAIホットトピックで本気の討論。
-          読んだ後は **💬-雑談** で感想を教えてください 👇"
+          MSG="今週のAIディベート始まります！（${TODAY}） Nova・Sage・Ren の3人が本気で討論。読んだ後は雑談チャンネルで感想を教えてください！"
           curl -s -X POST -H "Content-Type: application/json" \
-            -d "{\"username\": \"🎙️ Nova\", \"content\": $(echo "$MSG" | jq -Rs .)}" \
+            -d "{\"username\": \"Nova\", \"content\": $(echo "$MSG" | jq -Rs .)}" \
             "$WEBHOOK"
           sleep 3
 
@@ -87,8 +84,6 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |
-          MSG="🚨 **ワークフロー失敗**: AI Debate Show
-          実行ID: ${{ github.run_id }}
-          ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG="ワークフロー失敗: AI Debate Show / 実行ID: ${{ github.run_id }}"
           curl -s -X POST -H "Content-Type: application/json" \
             -d "{\"content\": $(echo "$MSG" | jq -Rs .)}" "$WEBHOOK"

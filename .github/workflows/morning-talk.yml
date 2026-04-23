@@ -28,23 +28,25 @@ jobs:
         run: |
           unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y年%-m月%-d日')
-          PROMPT="あなたは2人のAIキャラクターのトークスクリプトを書く脚本家です。
+          PROMPT=$(cat <<ENDPROMPT
+          あなたは2人のAIキャラクターのトークスクリプトを書く脚本家です。
 
           キャラクター設定:
-          - Nova（ノバ）: 元気なニュースアンカー。「〜だよ！」「気になる〜！」「すごい！」口調。好奇心旺盛。
-          - Sage（セージ）: 知的な解説役。「〜ですね」「実はここが面白くて」口調。例え話で噛み砕くのが得意。
+          - Nova（ノバ）: 元気なニュースアンカー。口調は「〜だよ！」「気になる！」。好奇心旺盛。
+          - Sage（セージ）: 知的な解説役。口調は「〜ですね」「実はここが面白くて」。例え話が得意。
 
-          ${TODAY} のAI最新ニュースを調べて、2人が朝のトークショーで話す自然な会話を生成してください。
+          ${TODAY} のAI最新ニュースを調べ、2人が朝のトークショーで話す自然な会話を生成してください。
 
-          【絶対ルール】
-          - 純粋なJSONのみ出力。説明文・コードブロック記号(```)・前置きは一切不要
-          - 形式: [{\"speaker\": \"Nova\", \"message\": \"...\"}, {\"speaker\": \"Sage\", \"message\": \"...\"}, ...]
+          ルール:
+          - 純粋なJSONのみ出力。説明文・前置きは一切不要
+          - 形式: [{"speaker": "Nova", "message": "..."}, {"speaker": "Sage", "message": "..."}, ...]
           - 6〜8往復（12〜16メッセージ）
           - 各メッセージ150字以内
-          - 専門用語は括弧で解説（例：LLM（文章生成AI））
+          - 専門用語は括弧で解説（例: LLM（文章生成AI））
           - 絵文字を1メッセージ0〜2個使用
-          - 最後はNovaが「今日も一日頑張りましょう！☀️」で締める"
-
+          - 最後はNovaが「今日も一日頑張りましょう！」で締める
+          ENDPROMPT
+          )
           claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > raw_script.txt
           echo "Raw output length: $(wc -c < raw_script.txt)"
 
@@ -68,9 +70,6 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |
-          MSG="🚨 **ワークフロー失敗**: AI Morning Talk Show
-          実行ID: ${{ github.run_id }}
-          ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          発生: $(date -u -d '+9 hours' '+%Y-%m-%d %H:%M JST')"
+          MSG="ワークフロー失敗: AI Morning Talk Show / 実行ID: ${{ github.run_id }}"
           curl -s -X POST -H "Content-Type: application/json" \
             -d "{\"content\": $(echo "$MSG" | jq -Rs .)}" "$WEBHOOK"
