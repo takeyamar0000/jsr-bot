@@ -1,8 +1,8 @@
-name: Auto Reply - Sage (Lv.2)
+name: Auto Reply - ハル (Lv.2)
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 30分おき
+    - cron: '*/5 * * * *'   # 5分おき
   workflow_dispatch:
 
 permissions:
@@ -17,14 +17,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
 
+      # ── Stage 1: 軽量チェック（Node.js / Claude 不要、~8秒で完了）──
+      - name: Check if reply needed
+        id: check
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_CHAT_ID }}
+        run: |
+          RESULT=$(python3 .github/scripts/check_needs_reply.py)
+          echo "needs_reply=$RESULT" >> $GITHUB_OUTPUT
+          echo "Reply needed: $RESULT"
+
+      # ── Stage 2: 返信が必要な時だけ Claude を起動 ──
       - uses: actions/setup-node@v4.4.0
+        if: steps.check.outputs.needs_reply == 'true'
         with:
           node-version: '22'
 
       - name: Install Claude Code CLI
+        if: steps.check.outputs.needs_reply == 'true'
         run: npm install -g @anthropic-ai/claude-code
 
-      - name: Check and Reply
+      - name: Generate and Post Reply (ハル)
+        if: steps.check.outputs.needs_reply == 'true'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           DISCORD_BOT_TOKEN:       ${{ secrets.DISCORD_BOT_TOKEN }}
@@ -39,7 +54,7 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |
-          MSG="ワークフロー失敗: Auto Reply - Sage / 実行ID: ${{ github.run_id }}"
+          MSG="ワークフロー失敗: Auto Reply ハル / 実行ID: ${{ github.run_id }}"
           CONTENT=$(echo "$MSG" | jq -Rs .)
           curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
             -d "{\"content\": ${CONTENT}}" "$WEBHOOK"
