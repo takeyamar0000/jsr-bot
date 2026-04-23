@@ -12,7 +12,7 @@
 
 1. https://github.com/new にアクセス
 2. リポジトリ名: `jsr-bot`（任意、以下この名前前提）
-3. **Private を選択**（Webhook URLをSecretsに入れるため、絶対Publicにしないこと）
+3. **Public を選択推奨**（GitHub Actions が Public リポジトリは無制限無料。Secrets は Public でも完全非公開）
 4. 「Create repository」
 
 ## Step 2: ファイルをpush（5分）
