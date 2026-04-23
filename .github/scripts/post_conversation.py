@@ -53,6 +53,7 @@ for i, msg in enumerate(script):
     post(display, message)
     # 最後のメッセージ以外は間を空けて自然な会話に見せる
     if i < len(script) - 1:
-        time.sleep(1.8)
+        delay = float(os.environ.get("POST_DELAY_SECONDS", "2"))
+        time.sleep(delay)
 
 print(f"Posted {len(script)} messages.")

@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4.2.2
 
@@ -24,35 +24,47 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
+      - name: Fetch Today's Discord Content
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: |
+          python3 .github/scripts/fetch_discord_content.py > discord_context.txt
+          echo "Fetched $(wc -c < discord_context.txt) bytes from Discord"
+          cat discord_context.txt
+
       - name: Generate Debate Script (JSON)
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y年%-m月%-d日')
+          DISCORD_CONTENT=$(cat discord_context.txt)
           PROMPT=$(cat <<ENDPROMPT
-          あなたは3人のAIキャラクターによるディベートの脚本家です。
+          あなたは3人のAIキャラクターによるリアルなディベートの脚本家です。
 
           キャラクター設定:
-          - Nova（ノバ）: 公平な司会者。口調は「次はどうでしょう？」「まとめると？」。
-          - Sage（セージ）: 肯定・賛成派。口調は「〜という点で素晴らしいです」「データを見ると〜」。論理的。
-          - Ren（レン）: 懐疑・批判派。口調は「本当にそう？」「でも〜ではないですか？」。鋭い質問が特徴。
+          - Nova（ノバ）: 公平な司会者。口調は「次はどうでしょう？」「まとめると？」「鋭い指摘ですね」。
+          - Sage（セージ）: 肯定・賛成派。口調は「〜という点で素晴らしいです」「データを見ると〜」。論理的で冷静。
+          - Ren（レン）: 懐疑・批判派。口調は「本当にそう？」「でも〜ではないですか？」「それは楽観的すぎます」。鋭く本質を突く。
 
-          ${TODAY} 時点でのAI界隈の最もホットな論争テーマを1つ選び、3人のディベートを生成してください。
-          テーマ例: AIは仕事を奪うか、AGIは10年以内に来るか、AIの著作権問題 等
-          ただし今週のニュースに関連するテーマを優先してください。
+          【本日のJsR Academy 投稿コンテキスト】
+          以下は本日Discord に投稿された実際のAI情報です。この内容を元にディベートテーマを選び、具体的なニュースや事例を引用しながら議論してください。
 
-          ルール:
+          ${DISCORD_CONTENT}
+
+          【ディベート生成ルール】
+          - 上記コンテキストの中から最も論争になりうるテーマを1つ選ぶ
+          - 具体的なニュース・数字・事例を会話に盛り込む（抽象論を避ける）
           - 純粋なJSONのみ出力。説明文・前置きは一切不要
           - 形式: [{"speaker": "Nova", "message": "..."}, ...]
-          - 最初にNovaがテーマを紹介する1メッセージを入れる
+          - 最初にNovaがテーマを1〜2行で紹介する
           - 10〜14メッセージ（Nova→Sage→Ren→Nova→... の流れ）
-          - 各メッセージ200字以内
-          - 専門用語は括弧で解説、絵文字を適度に使用
+          - 各メッセージ180字以内
+          - 専門用語は括弧で解説、絵文字を自然に使用
           - 最後はNovaが「みなさんはどう思いますか？ 雑談チャンネルで教えてください！」で締める
           ENDPROMPT
           )
-          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > raw_debate.txt
+          claude -p "$PROMPT" > raw_debate.txt
           echo "Raw output length: $(wc -c < raw_debate.txt)"
 
       - name: Extract JSON
@@ -69,17 +81,17 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_DEBATE }}
         run: |
-          echo "Webhook URL length: ${#WEBHOOK}"
           TODAY=$(date -u -d '+9 hours' '+%Y/%m/%d')
-          MSG="今週のAIディベート始まります！（${TODAY}） Nova・Sage・Ren の3人が本気で討論。読んだ後は雑談チャンネルで感想を教えてください！"
+          MSG="今週のAIディベート始まります！（${TODAY}） Nova・Sage・Ren の3人が本日のニュースを元に本気で討論します。読んだ後は 💬-雑談 で感想を教えてください！"
           CONTENT=$(echo "$MSG" | jq -Rs .)
-          BODY="{\"username\": \"Nova\", \"content\": ${CONTENT}}"
+          BODY="{\"username\": \"🎙️ Nova\", \"content\": ${CONTENT}}"
           curl -s -X POST -H "Content-Type: application/json; charset=utf-8" -d "$BODY" "$WEBHOOK"
-          sleep 3
+          sleep 5
 
       - name: Post Debate to Discord
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_DEBATE }}
+          POST_DELAY_SECONDS: "10"
         run: python3 .github/scripts/post_conversation.py < debate.json
 
       - name: Notify on failure
