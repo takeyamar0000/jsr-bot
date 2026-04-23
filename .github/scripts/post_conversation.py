@@ -23,7 +23,10 @@ def post(username: str, message: str) -> None:
         "username": username,
         "content":  message,
     }).encode("utf-8")
-    req = Request(WEBHOOK, data=payload, headers={"Content-Type": "application/json"})
+    req = Request(WEBHOOK, data=payload, headers={
+        "Content-Type": "application/json",
+        "User-Agent": "DiscordBot (https://github.com/takeyamar0000/jsr-bot, 1.0)",
+    })
     try:
         with urlopen(req) as resp:
             pass

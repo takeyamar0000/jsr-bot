@@ -21,9 +21,14 @@ CHANNEL_ID = os.environ["DISCORD_CHANNEL_ID"]
 WEBHOOK    = os.environ["WEBHOOK"]
 WINDOW_MIN = int(os.environ.get("REPLY_WINDOW_MINUTES", "35"))
 
+BOT_UA = "DiscordBot (https://github.com/takeyamar0000/jsr-bot, 1.0)"
+
 def discord_get(path: str) -> dict | list:
     url = f"https://discord.com/api/v10{path}"
-    req = Request(url, headers={"Authorization": f"Bot {BOT_TOKEN}"})
+    req = Request(url, headers={
+        "Authorization": f"Bot {BOT_TOKEN}",
+        "User-Agent": BOT_UA,
+    })
     with urlopen(req) as resp:
         return json.loads(resp.read())
 
@@ -32,7 +37,10 @@ def post_webhook(content: str) -> None:
         "username": "🧠 Sage",
         "content":  content,
     }).encode("utf-8")
-    req = Request(WEBHOOK, data=payload, headers={"Content-Type": "application/json"})
+    req = Request(WEBHOOK, data=payload, headers={
+        "Content-Type": "application/json",
+        "User-Agent": BOT_UA,
+    })
     with urlopen(req) as _:
         pass
 
