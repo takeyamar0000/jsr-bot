@@ -23,30 +23,50 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
+      - name: Select Today's Term from List
+        id: pick
+        run: |
+          TERMS_FILE=".github/data/glossary-terms.json"
+          TOTAL=$(jq '.terms | length' "$TERMS_FILE")
+          DAY_OF_YEAR=$(date -u -d '+9 hours' '+%j')
+          # 10# prefix: 009 等の先頭0を8進数解釈させない
+          INDEX=$(( (10#$DAY_OF_YEAR - 1) % TOTAL ))
+
+          TERM_JP=$(jq -r ".terms[$INDEX].jp" "$TERMS_FILE")
+          TERM_EN=$(jq -r ".terms[$INDEX].en" "$TERMS_FILE")
+          TERM_CAT=$(jq -r ".terms[$INDEX].category" "$TERMS_FILE")
+          TERM_HINT=$(jq -r ".terms[$INDEX].hint" "$TERMS_FILE")
+
+          echo "index=$INDEX / total=$TOTAL"
+          echo "picked: $TERM_JP ($TERM_EN) / $TERM_CAT"
+
+          {
+            echo "jp=$TERM_JP"
+            echo "en=$TERM_EN"
+            echo "category=$TERM_CAT"
+            echo "hint=$TERM_HINT"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Generate Term Explanation
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TERM_JP: ${{ steps.pick.outputs.jp }}
+          TERM_EN: ${{ steps.pick.outputs.en }}
+          TERM_CAT: ${{ steps.pick.outputs.category }}
+          TERM_HINT: ${{ steps.pick.outputs.hint }}
         run: |
           unset ANTHROPIC_API_KEY
           TODAY=$(date -u -d '+9 hours' '+%Y-%m-%d')
-          # 日付から決定的にカテゴリを選んで重複を減らす
-          DAY_OF_YEAR=$(date -u -d '+9 hours' '+%j')
-          THEME_INDEX=$(( DAY_OF_YEAR % 5 ))
-          case $THEME_INDEX in
-            0) THEME="AI基礎用語（LLM、トークン、パラメータなど）" ;;
-            1) THEME="AIサービス・製品に関する用語（ChatGPT、Copilot、エージェントなど）" ;;
-            2) THEME="AI開発・技術用語（ファインチューニング、RAG、プロンプトエンジニアリングなど）" ;;
-            3) THEME="AI周辺ビジネス・倫理用語（アラインメント、ハルシネーション、バイアスなど）" ;;
-            4) THEME="最新AIトレンド用語（MCP、マルチモーダル、推論モデルなど）" ;;
-          esac
 
-          PROMPT="あなたはアベリアの研修生・AI初心者・一般人向けの『AI用語辞典』担当です。今日は『${THEME}』のカテゴリから、1つの用語を選んで解説してください。
+          PROMPT="あなたはアベリアの研修生・AI初心者・一般人向けの『AI用語辞典』担当です。今日の用語は既に指定されています。下記の用語について、WebSearchで最新の正確な情報を確認した上で、分かりやすく解説してください。
 
-          【選ぶ基準】
-          - 初心者がニュースや会話で見かけて『何これ？』と感じがちな用語
-          - その用語を知ると世界が少し広がるもの
-          - 既に基礎すぎて誰でも知っているレベルは避ける
-          - 難しすぎる学術用語も避ける
+          【今日解説する用語】
+          - 日本語: ${TERM_JP}
+          - 英語: ${TERM_EN}
+          - カテゴリ: ${TERM_CAT}
+          - 参考ヒント: ${TERM_HINT}
+
+          ※ 用語選択は完了しています。別の用語を選んだり、複数を紹介したりしないでください。
 
           【書き方のルール】
           - 専門用語をさらに専門用語で説明しない。必ず日常の言葉や比喩で
@@ -58,7 +78,7 @@ jobs:
 
           📖 **今日のAI用語 - ${TODAY}**
 
-          ## [日本語訳または読み方]（英語: [term]）
+          ## ${TERM_JP}（英語: ${TERM_EN}）
 
           **🌱 要するに？**
           [1-2文で核をつかむ]
@@ -78,7 +98,7 @@ jobs:
           - 上記フォーマット以降に何も書かない
           - 参考URL・ソース一覧書かない
           - 『Sources:』『参考:』等の見出し禁止
-          - 用語は1つだけ（複数禁止）
+          - 指定された用語のみ解説（別用語への切り替え・複数紹介は禁止）
           - 不確かな情報は書かない"
 
           claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > term.txt
