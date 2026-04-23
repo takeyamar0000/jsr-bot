@@ -67,11 +67,12 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_DEBATE }}
         run: |
+          echo "Webhook URL length: ${#WEBHOOK}"
           TODAY=$(date -u -d '+9 hours' '+%Y/%m/%d')
           MSG="今週のAIディベート始まります！（${TODAY}） Nova・Sage・Ren の3人が本気で討論。読んだ後は雑談チャンネルで感想を教えてください！"
-          curl -s -X POST -H "Content-Type: application/json" \
-            -d "{\"username\": \"Nova\", \"content\": $(echo "$MSG" | jq -Rs .)}" \
-            "$WEBHOOK"
+          CONTENT=$(echo "$MSG" | jq -Rs .)
+          BODY="{\"username\": \"Nova\", \"content\": ${CONTENT}}"
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" -d "$BODY" "$WEBHOOK"
           sleep 3
 
       - name: Post Debate to Discord
@@ -85,5 +86,6 @@ jobs:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |
           MSG="ワークフロー失敗: AI Debate Show / 実行ID: ${{ github.run_id }}"
-          curl -s -X POST -H "Content-Type: application/json" \
-            -d "{\"content\": $(echo "$MSG" | jq -Rs .)}" "$WEBHOOK"
+          CONTENT=$(echo "$MSG" | jq -Rs .)
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"content\": ${CONTENT}}" "$WEBHOOK"

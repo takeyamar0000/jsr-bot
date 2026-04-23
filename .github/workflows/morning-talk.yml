@@ -71,5 +71,6 @@ jobs:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |
           MSG="ワークフロー失敗: AI Morning Talk Show / 実行ID: ${{ github.run_id }}"
-          curl -s -X POST -H "Content-Type: application/json" \
-            -d "{\"content\": $(echo "$MSG" | jq -Rs .)}" "$WEBHOOK"
+          CONTENT=$(echo "$MSG" | jq -Rs .)
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"content\": ${CONTENT}}" "$WEBHOOK"

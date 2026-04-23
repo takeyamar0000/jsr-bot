@@ -37,8 +37,7 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |
-          MSG="🚨 **ワークフロー失敗**: Auto Reply - Sage
-          実行ID: ${{ github.run_id }}
-          ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          curl -s -X POST -H "Content-Type: application/json" \
-            -d "{\"content\": $(echo "$MSG" | jq -Rs .)}" "$WEBHOOK"
+          MSG="ワークフロー失敗: Auto Reply - Sage / 実行ID: ${{ github.run_id }}"
+          CONTENT=$(echo "$MSG" | jq -Rs .)
+          curl -s -X POST -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"content\": ${CONTENT}}" "$WEBHOOK"
