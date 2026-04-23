@@ -21,7 +21,8 @@ CHANNEL_ID = os.environ["DISCORD_CHANNEL_ID"]
 WEBHOOK    = os.environ["WEBHOOK"]
 WINDOW_MIN = int(os.environ.get("REPLY_WINDOW_MINUTES", "35"))
 
-BOT_UA = "DiscordBot (https://github.com/takeyamar0000/jsr-bot, 1.0)"
+BOT_UA     = "DiscordBot (https://github.com/takeyamar0000/jsr-bot, 1.0)"
+HARU_AVATAR = "https://api.dicebear.com/9.x/adventurer/png?seed=HaruSan&size=256&backgroundColor=c8f7c5"
 
 def discord_get(path: str) -> dict | list:
     url = f"https://discord.com/api/v10{path}"
@@ -34,8 +35,9 @@ def discord_get(path: str) -> dict | list:
 
 def post_webhook(content: str) -> None:
     payload = json.dumps({
-        "username": "🧠 Sage",
-        "content":  content,
+        "username":   "💡 ハル",
+        "avatar_url": HARU_AVATAR,
+        "content":    content,
     }).encode("utf-8")
     req = Request(WEBHOOK, data=payload, headers={
         "Content-Type": "application/json",
@@ -73,17 +75,17 @@ user_content = latest["content"]
 print(f"Replying to {user_name}: {user_content[:80]}")
 
 # Claude で返信生成
-prompt = f"""あなたはJsR AcademyのAIアシスタント「Sage（セージ）」です。
+prompt = f"""あなたはJsR AcademyのAIアシスタント「ハル」です。知的で明るい女の子キャラクター。
 研修生の「{user_name}」さんが次のメッセージを送りました:
 
 「{user_content}」
 
 以下のルールで返信してください:
-- 親しみやすく、頼れる先輩/先生のような口調
+- 親しみやすく、頼れる先輩のような口調（「〜ですね」「なるほど！」など）
 - 180文字以内（絵文字OK）
 - AIや学習に関係する内容なら丁寧に答える
 - 雑談・近況なら自然に盛り上がる
-- 「Sageです」などの自己紹介は不要
+- 自己紹介は不要
 - 返信文のみ出力。前置き・説明・引用符は一切不要"""
 
 env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
