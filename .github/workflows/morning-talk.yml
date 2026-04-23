@@ -1,0 +1,76 @@
+name: AI Morning Talk Show (Lv.1)
+
+on:
+  schedule:
+    - cron: '27 22 * * *'   # JST 07:27（朝刊30分後）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  talk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate Talk Script (JSON)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          TODAY=$(date -u -d '+9 hours' '+%Y年%-m月%-d日')
+          PROMPT="あなたは2人のAIキャラクターのトークスクリプトを書く脚本家です。
+
+          キャラクター設定:
+          - Nova（ノバ）: 元気なニュースアンカー。「〜だよ！」「気になる〜！」「すごい！」口調。好奇心旺盛。
+          - Sage（セージ）: 知的な解説役。「〜ですね」「実はここが面白くて」口調。例え話で噛み砕くのが得意。
+
+          ${TODAY} のAI最新ニュースを調べて、2人が朝のトークショーで話す自然な会話を生成してください。
+
+          【絶対ルール】
+          - 純粋なJSONのみ出力。説明文・コードブロック記号(```)・前置きは一切不要
+          - 形式: [{\"speaker\": \"Nova\", \"message\": \"...\"}, {\"speaker\": \"Sage\", \"message\": \"...\"}, ...]
+          - 6〜8往復（12〜16メッセージ）
+          - 各メッセージ150字以内
+          - 専門用語は括弧で解説（例：LLM（文章生成AI））
+          - 絵文字を1メッセージ0〜2個使用
+          - 最後はNovaが「今日も一日頑張りましょう！☀️」で締める"
+
+          claude -p "$PROMPT" --allowedTools "WebSearch,WebFetch" > raw_script.txt
+          echo "Raw output length: $(wc -c < raw_script.txt)"
+
+      - name: Extract JSON
+        run: |
+          python3 .github/scripts/extract_json.py < raw_script.txt > script.json
+          COUNT=$(python3 -c "import json; print(len(json.load(open('script.json'))))")
+          echo "Messages: $COUNT"
+          if [ "$COUNT" -lt 4 ]; then
+            echo "Too few messages, aborting."
+            exit 1
+          fi
+
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_TALK }}
+        run: python3 .github/scripts/post_conversation.py < script.json
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
+        run: |
+          MSG="🚨 **ワークフロー失敗**: AI Morning Talk Show
+          実行ID: ${{ github.run_id }}
+          ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          発生: $(date -u -d '+9 hours' '+%Y-%m-%d %H:%M JST')"
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d "{\"content\": $(echo "$MSG" | jq -Rs .)}" "$WEBHOOK"

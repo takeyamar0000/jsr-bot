@@ -1,0 +1,44 @@
+name: Auto Reply - Sage (Lv.2)
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # 30分おき
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Check and Reply
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          DISCORD_BOT_TOKEN:       ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID:      ${{ secrets.DISCORD_CHANNEL_CHAT_ID }}
+          WEBHOOK:                 ${{ secrets.DISCORD_WEBHOOK_CHAT }}
+        run: |
+          unset ANTHROPIC_API_KEY
+          python3 .github/scripts/auto_reply.py
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
+        run: |
+          MSG="🚨 **ワークフロー失敗**: Auto Reply - Sage
+          実行ID: ${{ github.run_id }}
+          ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d "{\"content\": $(echo "$MSG" | jq -Rs .)}" "$WEBHOOK"
