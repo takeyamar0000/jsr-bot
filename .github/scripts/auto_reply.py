@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-💬-雑談 の未返信メッセージに Sage が自動返信する。
+💬-雑談 の未返信メッセージに ハル が自動返信する。
 
 ロジック:
   - 直近10件を取得
-  - 最新メッセージがボット以外かつ30分以内 → Claudeで返信生成
+  - 最新メッセージが人間なら → Claudeで返信生成
   - 最新がボット発言 → スキップ（返信済み）
+  - 時間ウィンドウは設けない（check_needs_reply.py で一貫して「BOT発言以降の人間発言」を拾う）
 
 環境変数:
   DISCORD_BOT_TOKEN  - Bot Token（メッセージ読み取り用）
   DISCORD_CHANNEL_ID - 💬-雑談 のチャンネルID
-  WEBHOOK            - Sage が返信投稿する Webhook URL
+  WEBHOOK            - ハル が返信投稿する Webhook URL
 """
 import sys, json, os, time, subprocess, datetime
 from urllib.request import urlopen, Request
@@ -19,7 +20,6 @@ from urllib.error import HTTPError
 BOT_TOKEN  = os.environ["DISCORD_BOT_TOKEN"]
 CHANNEL_ID = os.environ["DISCORD_CHANNEL_ID"]
 WEBHOOK    = os.environ["WEBHOOK"]
-WINDOW_MIN = int(os.environ.get("REPLY_WINDOW_MINUTES", "35"))
 
 BOT_UA     = "DiscordBot (https://github.com/takeyamar0000/jsr-bot, 1.0)"
 HARU_AVATAR = "https://api.dicebear.com/9.x/adventurer/png?seed=HaruSan&size=256&backgroundColor=c8f7c5"
@@ -58,15 +58,6 @@ latest = messages[0]
 # ボット（自分自身含む）なら返信済み → スキップ
 if latest["author"].get("bot", False):
     print("Latest message is from a bot. Skipping.")
-    sys.exit(0)
-
-# 時刻チェック（30分以内か）
-ts_str = latest["timestamp"].replace("Z", "+00:00")
-ts = datetime.datetime.fromisoformat(ts_str).astimezone(datetime.timezone.utc)
-now = datetime.datetime.now(datetime.timezone.utc)
-age_min = (now - ts).total_seconds() / 60
-if age_min > WINDOW_MIN:
-    print(f"Message is {age_min:.1f} min old. Outside window.")
     sys.exit(0)
 
 user_name    = latest["author"].get("global_name") or latest["author"]["username"]
