@@ -2,11 +2,16 @@ name: Auto Reply - ハル (Lv.2)
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # 5分おき
+    - cron: '*/2 * * * *'   # 2分おき
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# 重複実行を防止：実行中のジョブがあれば新しい実行は1つだけpending保持
+concurrency:
+  group: auto-reply
+  cancel-in-progress: false
 
 jobs:
   reply:
