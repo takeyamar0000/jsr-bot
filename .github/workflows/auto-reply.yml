@@ -50,7 +50,7 @@ jobs:
           python3 .github/scripts/auto_reply.py
 
       - name: Notify on failure
-        if: failure()
+        if: failure() || cancelled()
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |

@@ -98,7 +98,7 @@ jobs:
         run: python3 .github/scripts/post_conversation.py < debate.json
 
       - name: Notify on failure
-        if: failure()
+        if: failure() || cancelled()
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |

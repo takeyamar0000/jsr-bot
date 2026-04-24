@@ -106,7 +106,7 @@ jobs:
             -d "$BODY" "$WEBHOOK"
 
       - name: Notify on failure
-        if: failure()
+        if: failure() || cancelled()
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_OPS }}
         run: |
